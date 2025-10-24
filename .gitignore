@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# 日志文件
+*.log
+
+# 输出文件
+output/
+downloads/
+
+# 浏览器相关
+*.crx
+
+# 配置文件（如果包含敏感信息）
+# config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+temp/
+profile_crawler/chrome_profile
