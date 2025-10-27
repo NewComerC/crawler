@@ -250,6 +250,264 @@ class Crawler:
             input("\n完成登录后按Enter继续...")
             return True
     
+    def click_view_more(self):
+        """点击最新上线的查看更多按钮"""
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        
+        logger.info("="*60)
+        logger.info("开始查找并点击'查看更多'按钮")
+        logger.info("="*60)
+        
+        try:
+            # 等待页面加载完成
+            time.sleep(3)
+            
+            # 保存点击前的页面HTML用于调试
+            timestamp_before = datetime.now().strftime('%Y%m%d_%H%M%S')
+            html_before = os.path.join(self.config.get('output_directory', './output'), f'before_click_{timestamp_before}.html')
+            with open(html_before, 'w', encoding='utf-8') as f:
+                f.write(self.driver.page_source)
+            logger.info(f"点击前页面HTML已保存: {html_before}")
+            
+            # 查找"查看更多"按钮的多种方式
+            view_more_button = None
+            
+            # 方法1: 查找包含"查看更多"文本的元素，特别针对最新上线区域
+            try:
+                logger.info("方法1: 查找包含'查看更多'文本的元素...")
+                elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), '查看更多')]")
+                logger.info(f"找到 {len(elements)} 个包含'查看更多'的元素")
+                
+                for i, elem in enumerate(elements):
+                    logger.info(f"元素 {i+1}: 标签={elem.tag_name}, 文本='{elem.text}', 可见={elem.is_displayed()}")
+                    
+                    # 获取元素的完整HTML结构
+                    try:
+                        element_html = elem.get_attribute('outerHTML')
+                        logger.info(f"元素HTML: {element_html[:200]}...")
+                    except Exception as e:
+                        logger.warning(f"获取元素HTML失败: {e}")
+                    
+                    if elem.is_displayed():
+                        # 检查是否在"最新上线"区域 - 通过查找父级容器
+                        try:
+                            # 查找包含"最新上线"标题的父容器
+                            parent_container = elem.find_element(By.XPATH, "./ancestor::div[contains(@class, 'w_containt_item')]")
+                            parent_html = parent_container.get_attribute('outerHTML')
+                            
+                            if "最新上线" in parent_html:
+                                view_more_button = elem
+                                logger.info("✅ 找到'最新上线'区域的'查看更多'按钮")
+                                logger.info(f"父容器HTML片段: {parent_html[:300]}...")
+                                break
+                            else:
+                                logger.info(f"元素 {i+1} 不在'最新上线'区域")
+                                
+                        except Exception as e:
+                            logger.warning(f"检查父容器失败: {e}")
+                            
+                            # 备用方法：检查元素的父级文本
+                            try:
+                                parent = elem.find_element(By.XPATH, "./..")
+                                grandparent = elem.find_element(By.XPATH, "./../..")
+                                if "最新上线" in parent.text or "最新上线" in grandparent.text:
+                                    view_more_button = elem
+                                    logger.info("✅ 通过父级文本找到'最新上线'区域的'查看更多'按钮")
+                                    break
+                            except Exception as e2:
+                                logger.warning(f"备用检查方法失败: {e2}")
+            except Exception as e:
+                logger.warning(f"方法1失败: {e}")
+            
+            # 方法2: 查找红色按钮（根据图片描述，最新上线的查看更多是红色的）
+            if not view_more_button:
+                try:
+                    logger.info("方法2: 查找红色按钮...")
+                    # 查找具有红色样式的按钮
+                    red_buttons = self.driver.find_elements(By.XPATH, "//button[contains(@style, 'red') or contains(@class, 'red') or contains(@class, 'btn-red')]")
+                    logger.info(f"找到 {len(red_buttons)} 个红色按钮")
+                    
+                    for btn in red_buttons:
+                        if btn.is_displayed() and btn.is_enabled() and "查看更多" in btn.text:
+                            view_more_button = btn
+                            logger.info("✅ 找到红色'查看更多'按钮")
+                            break
+                except Exception as e:
+                    logger.warning(f"方法2失败: {e}")
+            
+            # 方法3: 查找所有按钮，然后筛选
+            if not view_more_button:
+                try:
+                    logger.info("方法3: 查找所有按钮并筛选...")
+                    all_buttons = self.driver.find_elements(By.TAG_NAME, "button")
+                    all_links = self.driver.find_elements(By.TAG_NAME, "a")
+                    all_elements = all_buttons + all_links
+                    
+                    logger.info(f"找到 {len(all_elements)} 个按钮和链接")
+                    
+                    for elem in all_elements:
+                        if elem.is_displayed() and elem.is_enabled():
+                            text = elem.text.strip()
+                            if "查看更多" in text:
+                                logger.info(f"找到'查看更多'元素: {text}")
+                                # 检查是否在最新上线区域
+                                try:
+                                    # 向上查找父元素，看是否包含"最新上线"
+                                    parent = elem.find_element(By.XPATH, "./..")
+                                    grandparent = elem.find_element(By.XPATH, "./../..")
+                                    if "最新上线" in parent.text or "最新上线" in grandparent.text:
+                                        view_more_button = elem
+                                        logger.info("✅ 确认是'最新上线'区域的'查看更多'按钮")
+                                        break
+                                except:
+                                    # 如果无法确定位置，选择第一个
+                                    if not view_more_button:
+                                        view_more_button = elem
+                                        logger.info("✅ 找到'查看更多'按钮（位置未确认）")
+                except Exception as e:
+                    logger.warning(f"方法3失败: {e}")
+            
+            if view_more_button:
+                logger.info("准备点击'查看更多'按钮...")
+                logger.info(f"按钮信息: 标签={view_more_button.tag_name}, 文本='{view_more_button.text}'")
+                
+                # 滚动到按钮位置
+                self.driver.execute_script("arguments[0].scrollIntoView(true);", view_more_button)
+                time.sleep(1)
+                
+                # 记录点击前的URL
+                url_before = self.driver.current_url
+                logger.info(f"点击前URL: {url_before}")
+                
+                # 由于这是一个span元素，可能需要特殊处理
+                # 尝试多种点击方式
+                click_success = False
+                
+                # 方法1: 直接点击
+                try:
+                    view_more_button.click()
+                    logger.info("✅ 直接点击成功")
+                    click_success = True
+                except Exception as e:
+                    logger.warning(f"直接点击失败: {e}")
+                
+                # 方法2: JavaScript点击
+                if not click_success:
+                    try:
+                        self.driver.execute_script("arguments[0].click();", view_more_button)
+                        logger.info("✅ JavaScript点击成功")
+                        click_success = True
+                    except Exception as e:
+                        logger.warning(f"JavaScript点击失败: {e}")
+                
+                # 方法3: 模拟鼠标事件
+                if not click_success:
+                    try:
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        actions = ActionChains(self.driver)
+                        actions.move_to_element(view_more_button).click().perform()
+                        logger.info("✅ 鼠标事件点击成功")
+                        click_success = True
+                    except Exception as e:
+                        logger.warning(f"鼠标事件点击失败: {e}")
+                
+                # 方法4: 点击父元素
+                if not click_success:
+                    try:
+                        parent_element = view_more_button.find_element(By.XPATH, "./..")
+                        parent_element.click()
+                        logger.info("✅ 点击父元素成功")
+                        click_success = True
+                    except Exception as e:
+                        logger.warning(f"点击父元素失败: {e}")
+                
+                if click_success:
+                    # 等待页面跳转
+                    time.sleep(5)
+                    
+                    # 检查是否成功跳转到文献列表页面
+                    current_url = self.driver.current_url
+                    logger.info(f"点击后URL: {current_url}")
+                    
+                    # 保存点击后的页面HTML用于调试
+                    timestamp_after = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    html_after = os.path.join(self.config.get('output_directory', './output'), f'after_click_{timestamp_after}.html')
+                    with open(html_after, 'w', encoding='utf-8') as f:
+                        f.write(self.driver.page_source)
+                    logger.info(f"点击后页面HTML已保存: {html_after}")
+                    
+                    # 检查页面标题变化
+                    page_title = self.driver.title
+                    logger.info(f"点击后页面标题: {page_title}")
+                    
+                    # 检查是否有新窗口或标签页
+                    if len(self.driver.window_handles) > 1:
+                        logger.info("检测到新窗口/标签页，切换到新窗口")
+                        self.driver.switch_to.window(self.driver.window_handles[-1])
+                        current_url = self.driver.current_url
+                        logger.info(f"新窗口URL: {current_url}")
+                    
+                    if "latest_online" in current_url or "检索结果" in self.driver.title or url_before != current_url:
+                        logger.info("✅ 成功进入文献列表页面")
+                        return True
+                    else:
+                        logger.warning("⚠️ 可能未成功跳转到文献列表页面")
+                        logger.info("请检查保存的HTML文件进行调试")
+                        return False
+                else:
+                    logger.error("❌ 所有点击方法都失败了")
+                    return False
+            else:
+                logger.error("❌ 未找到'查看更多'按钮")
+                logger.info("请检查页面是否正确加载，或手动点击按钮")
+                return False
+                
+        except Exception as e:
+            logger.error(f"点击'查看更多'按钮过程出错: {e}")
+            return False
+
+    def analyze_html_for_debug(self, html_file_path):
+        """分析HTML文件，查找查看更多按钮的详细信息"""
+        try:
+            with open(html_file_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            logger.info(f"分析HTML文件: {html_file_path}")
+            
+            # 查找所有包含"查看更多"的元素
+            import re
+            view_more_patterns = [
+                r'<[^>]*>查看更多[^<]*</[^>]*>',
+                r'查看更多',
+                r'最新上线.*?查看更多',
+            ]
+            
+            for pattern in view_more_patterns:
+                matches = re.findall(pattern, html_content, re.IGNORECASE | re.DOTALL)
+                if matches:
+                    logger.info(f"找到匹配模式 '{pattern}': {len(matches)} 个")
+                    for i, match in enumerate(matches[:3]):  # 只显示前3个
+                        logger.info(f"  匹配 {i+1}: {match[:100]}...")
+            
+            # 查找可能的链接
+            link_patterns = [
+                r'href="[^"]*latest[^"]*"',
+                r'href="[^"]*online[^"]*"',
+                r'href="[^"]*更多[^"]*"',
+            ]
+            
+            for pattern in link_patterns:
+                matches = re.findall(pattern, html_content, re.IGNORECASE)
+                if matches:
+                    logger.info(f"找到链接模式 '{pattern}': {len(matches)} 个")
+                    for i, match in enumerate(matches[:3]):
+                        logger.info(f"  链接 {i+1}: {match}")
+            
+        except Exception as e:
+            logger.error(f"分析HTML文件失败: {e}")
+
     def access_page(self):
         """访问目标页面"""
         target_url = self.config.get('target_url')
@@ -283,6 +541,42 @@ class Crawler:
             
             logger.info(f"页面标题: {self.driver.title}")
             logger.info(f"当前URL: {self.driver.current_url}")
+            
+            # 点击"查看更多"按钮进入文献列表
+            click_result = self.click_view_more()
+            if click_result:
+                # 保存跳转后的页面
+                timestamp_after = datetime.now().strftime('%Y%m%d_%H%M%S')
+                screenshot_after = os.path.join(self.config.get('output_directory', './output'), f'literature_list_{timestamp_after}.png')
+                self.driver.save_screenshot(screenshot_after)
+                logger.info(f"文献列表页面截图已保存: {screenshot_after}")
+                
+                html_file_after = os.path.join(self.config.get('output_directory', './output'), f'literature_list_{timestamp_after}.html')
+                with open(html_file_after, 'w', encoding='utf-8') as f:
+                    f.write(self.driver.page_source)
+                logger.info(f"文献列表页面HTML已保存: {html_file_after}")
+                
+                logger.info(f"文献列表页面标题: {self.driver.title}")
+                logger.info(f"文献列表页面URL: {self.driver.current_url}")
+            else:
+                # 点击失败，分析HTML文件进行调试
+                logger.info("="*60)
+                logger.info("点击失败，开始分析HTML文件进行调试")
+                logger.info("="*60)
+                
+                # 分析点击前的HTML文件
+                html_files = [f for f in os.listdir(self.config.get('output_directory', './output')) if f.startswith('before_click_') and f.endswith('.html')]
+                if html_files:
+                    latest_html = max(html_files)
+                    html_path = os.path.join(self.config.get('output_directory', './output'), latest_html)
+                    self.analyze_html_for_debug(html_path)
+                
+                # 分析点击后的HTML文件
+                html_files_after = [f for f in os.listdir(self.config.get('output_directory', './output')) if f.startswith('after_click_') and f.endswith('.html')]
+                if html_files_after:
+                    latest_html_after = max(html_files_after)
+                    html_path_after = os.path.join(self.config.get('output_directory', './output'), latest_html_after)
+                    self.analyze_html_for_debug(html_path_after)
             
         except Exception as e:
             logger.error(f"访问页面失败: {e}")
